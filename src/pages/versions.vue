@@ -99,7 +99,7 @@
                 />
               </td>
               <td class="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                {{ item.updateTime ? formatDate(item.updateTime) : '-' }}
+                {{ item.updatedAt ? formatDate(item.updatedAt) : '-' }}
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">

@@ -27,7 +27,7 @@
               <th class="px-4 py-3">ID</th>
               <th class="px-4 py-3">Name</th>
               <th class="px-4 py-3">App ID</th>
-              <th class="px-4 py-3">Description</th>
+              <th class="px-4 py-3">Scopes</th>
               <th class="px-4 py-3">Redirect URIs</th>
               <th class="px-4 py-3">Created</th>
               <th class="px-4 py-3">Actions</th>
@@ -45,29 +45,47 @@
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
                   <img v-if="item.iconUrl" :src="item.iconUrl" alt="" class="size-6 rounded" />
-                  <span class="font-medium text-gray-900 dark:text-white">{{ item.name }}</span>
+                  <div>
+                    <p class="font-medium text-gray-900 dark:text-white">{{ item.name }}</p>
+                    <button
+                      v-if="item.description"
+                      class="mt-1 text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      @click="openDetailModal(item, 'description')"
+                    >
+                      View description
+                    </button>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-300">
                 {{ item.appId }}
               </td>
-              <td class="max-w-[200px] px-4 py-3">
-                <div v-if="item.description">
-                  <p class="truncate text-gray-600 dark:text-gray-300">{{ item.description }}</p>
-                  <button
-                    class="mt-1 text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    @click="openDetailModal(item, 'description')"
-                  >
-                    View full
-                  </button>
+              <td class="max-w-[280px] px-4 py-3">
+                <div v-if="item.allowedScopes?.length" class="flex flex-wrap gap-1.5">
+                  <UBadge
+                    v-for="scope in item.allowedScopes"
+                    :key="scope"
+                    :label="scope"
+                    :color="scopeBadgeColor(scope)"
+                    variant="subtle"
+                    size="sm"
+                  />
                 </div>
                 <span v-else class="text-gray-400">-</span>
               </td>
-              <td class="max-w-[200px] px-4 py-3">
+              <td class="max-w-[240px] px-4 py-3">
                 <div v-if="item.redirectUris?.length">
-                  <span class="truncate font-mono text-xs text-gray-500 dark:text-gray-400">{{
-                    item.redirectUris[0]
-                  }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                      {{ item.redirectUris[0]?.uri }}
+                    </span>
+                    <UBadge
+                      :label="formatMatchMode(item.redirectUris[0]?.matchMode)"
+                      variant="soft"
+                      size="sm"
+                      color="neutral"
+                    />
+                  </div>
                   <button
                     class="mt-1 block text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                     @click="openDetailModal(item, 'redirectUris')"
@@ -82,19 +100,10 @@
                 <span v-else class="text-gray-400">-</span>
               </td>
               <td class="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                {{ item.createTime ? formatDate(item.createTime) : '-' }}
+                {{ item.createdAt ? formatDate(item.createdAt) : '-' }}
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                  <UTooltip text="View Secret">
-                    <UButton
-                      icon="i-heroicons-eye"
-                      variant="ghost"
-                      color="neutral"
-                      size="xs"
-                      @click="viewSecret(item)"
-                    />
-                  </UTooltip>
                   <UTooltip text="Reset Secret">
                     <UButton
                       icon="i-heroicons-arrow-path"
@@ -154,13 +163,17 @@
     <!-- Create/Edit Modal -->
     <UModal v-model:open="modalOpen" :title="isEditing ? 'Edit Application' : 'Create Application'">
       <template #body>
-        <div class="space-y-4">
+        <div class="space-y-5">
           <UFormField label="Name" name="name" required>
-            <UInput v-model="form.name" placeholder="e.g. My SSO App" />
+            <UInput v-model="form.name" placeholder="e.g. My SSO App" class="w-full" />
           </UFormField>
 
           <UFormField label="Icon URL" name="iconUrl">
-            <UInput v-model="form.iconUrl" placeholder="https://example.com/icon.png" />
+            <UInput
+              v-model="form.iconUrl"
+              placeholder="https://example.com/icon.png"
+              class="w-full"
+            />
           </UFormField>
 
           <UFormField label="Description" name="description">
@@ -168,16 +181,27 @@
               v-model="form.description"
               placeholder="A third-party application"
               :rows="2"
+              class="w-full"
             />
           </UFormField>
 
           <UFormField label="Redirect URIs" name="redirectUris" :required="!isEditing">
             <div class="space-y-2">
-              <div v-for="(_, i) in form.redirectUris" :key="i" class="flex gap-2">
+              <div
+                v-for="(redirect, i) in form.redirectUris"
+                :key="i"
+                class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_14rem_auto]"
+              >
                 <UInput
-                  v-model="form.redirectUris[i]"
+                  v-model="redirect.uri"
                   placeholder="https://myapp.example.com/callback"
-                  class="flex-1"
+                  class="w-full"
+                />
+                <USelect
+                  v-model="redirect.matchMode"
+                  :items="matchModeItems(redirect.uri)"
+                  :disabled="!isLoopbackRedirect(redirect.uri)"
+                  class="w-full"
                 />
                 <UButton
                   v-if="form.redirectUris.length > 1"
@@ -185,7 +209,7 @@
                   variant="ghost"
                   color="error"
                   size="sm"
-                  @click="form.redirectUris.splice(i, 1)"
+                  @click="removeRedirectUri(i)"
                 />
               </div>
               <UButton
@@ -194,9 +218,67 @@
                 color="neutral"
                 size="sm"
                 label="Add URI"
-                @click="form.redirectUris.push('')"
+                @click="addRedirectUri"
               />
             </div>
+          </UFormField>
+
+          <UFormField label="Allowed Scopes" name="allowedScopes">
+            <div v-if="openAppStore.scopesPending" class="text-sm text-gray-500 dark:text-gray-400">
+              Loading scopes...
+            </div>
+            <div v-else-if="scopeGroups.length" class="space-y-4">
+              <div
+                v-for="group in scopeGroups"
+                :key="group.category"
+                :class="[
+                  'rounded-md border p-3',
+                  group.category === 'mcp'
+                    ? 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/20'
+                    : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/40',
+                ]"
+              >
+                <div class="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                      {{ formatScopeCategory(group.category) }}
+                    </h3>
+                    <p
+                      v-if="group.category === 'mcp'"
+                      class="mt-1 text-xs text-amber-700 dark:text-amber-300"
+                    >
+                      MCP grants allow tool and API access.
+                    </p>
+                  </div>
+                  <UBadge
+                    v-if="group.category === 'mcp'"
+                    label="Tool access"
+                    color="warning"
+                    variant="subtle"
+                    size="sm"
+                  />
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <UCheckbox
+                    v-for="scope in group.scopes"
+                    :key="scope.scope"
+                    :model-value="form.allowedScopes.includes(scope.scope)"
+                    :label="scope.label"
+                    :description="scope.description || scope.scope"
+                    :disabled="scope.required || !scope.grantable"
+                    @update:model-value="toggleScope(scope.scope, Boolean($event))"
+                  />
+                </div>
+              </div>
+            </div>
+            <UAlert
+              v-else
+              icon="i-heroicons-exclamation-triangle"
+              color="warning"
+              variant="subtle"
+              title="Scope registry unavailable"
+              description="Scopes cannot be edited until the supported scope registry is loaded."
+            />
           </UFormField>
         </div>
       </template>
@@ -219,6 +301,13 @@
     <UModal v-model:open="secretModalOpen" title="Application Credentials">
       <template #body>
         <div class="space-y-3">
+          <UAlert
+            icon="i-heroicons-exclamation-triangle"
+            color="warning"
+            variant="subtle"
+            title="Save this secret now"
+            description="The app secret is shown only once after creation or reset."
+          />
           <UFormField label="App ID">
             <UInput :model-value="secretData.appId" readonly>
               <template #trailing>
@@ -245,13 +334,6 @@
               </template>
             </UInput>
           </UFormField>
-          <UAlert
-            icon="i-heroicons-exclamation-triangle"
-            color="warning"
-            variant="subtle"
-            title="Keep this secret safe!"
-            description="Never expose the app secret in client-side code or public repositories."
-          />
         </div>
       </template>
       <template #footer>
@@ -306,20 +388,26 @@
         </div>
         <div v-else class="space-y-2">
           <div
-            v-for="(uri, i) in detailModalItem?.redirectUris"
+            v-for="(redirect, i) in detailModalItem?.redirectUris"
             :key="i"
             class="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-800"
           >
-            <span class="font-mono text-sm break-all text-gray-700 dark:text-gray-300">{{
-              uri
-            }}</span>
+            <span class="font-mono text-sm break-all text-gray-700 dark:text-gray-300">
+              {{ redirect.uri }}
+            </span>
+            <UBadge
+              :label="formatMatchMode(redirect.matchMode)"
+              color="neutral"
+              variant="soft"
+              size="sm"
+            />
             <UButton
               icon="i-heroicons-clipboard"
               variant="ghost"
               color="neutral"
               size="xs"
               class="shrink-0"
-              @click="copyToClipboard(uri)"
+              @click="copyToClipboard(redirect.uri)"
             />
           </div>
         </div>
@@ -332,7 +420,28 @@
 </template>
 
 <script setup lang="ts">
-import type { OpenAppListItem, CreateOpenAppReq, UpdateOpenAppReq } from '~/types'
+import type {
+  CreateOpenAppReq,
+  OpenApp,
+  OpenAppListItem,
+  OpenAppRedirectUri,
+  OpenAppScope,
+  RedirectUriMatchMode,
+  UpdateOpenAppReq,
+} from '~/types'
+
+type ScopeGroup = {
+  category: string
+  scopes: OpenAppScope[]
+}
+
+type OpenAppForm = {
+  name: string
+  iconUrl: string
+  description: string
+  redirectUris: OpenAppRedirectUri[]
+  allowedScopes: string[]
+}
 
 const openAppStore = useOpenAppsStore()
 const toast = useToast()
@@ -359,26 +468,161 @@ const detailModalTitle = computed(() => {
   return 'Redirect URIs'
 })
 
+const secretData = reactive({
+  appId: '',
+  appSecret: '',
+})
+
+const form = reactive<OpenAppForm>({
+  name: '',
+  iconUrl: '',
+  description: '',
+  redirectUris: [{ uri: '', matchMode: 'exact' }],
+  allowedScopes: [],
+})
+
+const matchModeOptions = {
+  exact: { label: 'Exact', value: 'exact' },
+  loopback: { label: 'Loopback any port', value: 'loopback_port_agnostic' },
+}
+
+const scopeGroups = computed<ScopeGroup[]>(() => {
+  const groups = new Map<string, OpenAppScope[]>()
+  for (const scope of openAppStore.scopes) {
+    const category = normalizeScopeCategory(scope.category || inferScopeCategory(scope.scope))
+    groups.set(category, [...(groups.get(category) ?? []), scope])
+  }
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => scopeCategorySort(a) - scopeCategorySort(b) || a.localeCompare(b))
+    .map(([category, scopes]) => ({
+      category,
+      scopes: scopes.sort(
+        (a, b) => Number(b.required) - Number(a.required) || a.scope.localeCompare(b.scope),
+      ),
+    }))
+})
+
+const requiredScopes = computed(() => openAppStore.scopes.filter((scope) => scope.required))
+
 const openDetailModal = (item: OpenAppListItem, type: 'description' | 'redirectUris') => {
   detailModalItem.value = item
   detailModalType.value = type
   detailModalOpen.value = true
 }
 
-const secretData = reactive({
-  appId: '',
-  appSecret: '',
-})
-
-const form = reactive<CreateOpenAppReq & { description: string; iconUrl: string }>({
-  name: '',
-  iconUrl: '',
-  description: '',
-  redirectUris: [''],
-})
-
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleString()
+}
+
+const formatMatchMode = (matchMode?: RedirectUriMatchMode) => {
+  if (matchMode === 'loopback_port_agnostic') return 'Any loopback port'
+  return 'Exact'
+}
+
+const formatScopeCategory = (category: string) => {
+  if (category === 'mcp') return 'MCP'
+  if (category === 'identity') return 'Identity'
+  return category.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+const scopeBadgeColor = (scope: string) => {
+  return normalizeScopeCategory(inferScopeCategory(scope)) === 'mcp' ? 'warning' : 'info'
+}
+
+const inferScopeCategory = (scope: string) => {
+  if (scope === 'mcp' || scope.startsWith('mcp:')) return 'mcp'
+  if (['openid', 'profile', 'is_student'].includes(scope)) return 'identity'
+  return 'other'
+}
+
+const normalizeScopeCategory = (category: string) => {
+  return category.toLowerCase()
+}
+
+const scopeCategorySort = (category: string) => {
+  if (category === 'identity') return 0
+  if (category === 'mcp') return 1
+  return 2
+}
+
+const isLoopbackRedirect = (uri: string) => {
+  try {
+    const parsed = new URL(uri)
+    return parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+const matchModeItems = (uri: string) => {
+  if (isLoopbackRedirect(uri)) {
+    return [matchModeOptions.exact, matchModeOptions.loopback]
+  }
+  return [matchModeOptions.exact]
+}
+
+const normalizeRedirectUris = () => {
+  for (const redirect of form.redirectUris) {
+    if (!isLoopbackRedirect(redirect.uri)) {
+      redirect.matchMode = 'exact'
+    }
+  }
+}
+
+watch(() => form.redirectUris, normalizeRedirectUris, { deep: true })
+
+const applyRequiredScopes = () => {
+  for (const scope of requiredScopes.value) {
+    if (!form.allowedScopes.includes(scope.scope)) {
+      form.allowedScopes.push(scope.scope)
+    }
+  }
+}
+
+watch(requiredScopes, applyRequiredScopes)
+
+const ensureScopesLoaded = async () => {
+  if (openAppStore.scopes.length > 0 || openAppStore.scopesPending) return
+  await openAppStore.fetchScopes()
+  applyRequiredScopes()
+}
+
+const resetForm = (app?: OpenApp | OpenAppListItem) => {
+  Object.assign(form, {
+    name: app?.name ?? '',
+    iconUrl: app?.iconUrl ?? '',
+    description: app?.description ?? '',
+    redirectUris: app?.redirectUris?.length
+      ? app.redirectUris.map((redirect) => ({ ...redirect }))
+      : [{ uri: '', matchMode: 'exact' as RedirectUriMatchMode }],
+    allowedScopes: [...(app?.allowedScopes ?? [])],
+  })
+  applyRequiredScopes()
+  normalizeRedirectUris()
+}
+
+const addRedirectUri = () => {
+  form.redirectUris.push({ uri: '', matchMode: 'exact' })
+}
+
+const removeRedirectUri = (index: number) => {
+  form.redirectUris.splice(index, 1)
+}
+
+const toggleScope = (scope: string, checked: boolean) => {
+  const scopeMeta = openAppStore.scopes.find((item) => item.scope === scope)
+  if (scopeMeta?.required) {
+    applyRequiredScopes()
+    return
+  }
+
+  if (checked && !form.allowedScopes.includes(scope)) {
+    form.allowedScopes.push(scope)
+  } else if (!checked) {
+    form.allowedScopes = form.allowedScopes.filter((item) => item !== scope)
+    applyRequiredScopes()
+  }
 }
 
 const fetchOpenApps = () => {
@@ -387,56 +631,82 @@ const fetchOpenApps = () => {
 
 watch(currentPage, () => fetchOpenApps())
 
-onMounted(() => fetchOpenApps())
+onMounted(() => {
+  fetchOpenApps()
+  ensureScopesLoaded()
+})
 
-const openCreateModal = () => {
+const openCreateModal = async () => {
   isEditing.value = false
   editingId.value = null
-  Object.assign(form, { name: '', iconUrl: '', description: '', redirectUris: [''] })
+  await ensureScopesLoaded()
+  resetForm()
   modalOpen.value = true
 }
 
-const openEditModal = (item: OpenAppListItem) => {
+const openEditModal = async (item: OpenAppListItem) => {
   isEditing.value = true
   editingId.value = item.id
-  Object.assign(form, {
-    name: item.name,
-    iconUrl: item.iconUrl || '',
-    description: item.description || '',
-    redirectUris: item.redirectUris?.length ? [...item.redirectUris] : [''],
-  })
+  await ensureScopesLoaded()
+  try {
+    const detail = await openAppStore.fetchOne(item.id)
+    resetForm(detail)
+  } catch {
+    resetForm(item)
+  }
   modalOpen.value = true
 }
 
-const viewSecret = async (item: OpenAppListItem) => {
-  try {
-    const detail = await openAppStore.fetchOne(item.id)
-    secretData.appId = detail.appId
-    secretData.appSecret = detail.appSecret || ''
-    secretModalOpen.value = true
-  } catch {
-    // Error handled by useApi
+const buildRedirectUris = () => {
+  return form.redirectUris
+    .map((redirect) => ({
+      uri: redirect.uri.trim(),
+      matchMode: redirect.matchMode,
+    }))
+    .filter((redirect) => redirect.uri)
+}
+
+const validateForm = () => {
+  if (!form.name) {
+    toast.add({ title: 'Name is required', color: 'error' })
+    return false
   }
+
+  const redirectUris = buildRedirectUris()
+  if (!isEditing.value && redirectUris.length === 0) {
+    toast.add({ title: 'At least one redirect URI is required', color: 'error' })
+    return false
+  }
+
+  const invalidLoopback = redirectUris.find(
+    (redirect) =>
+      redirect.matchMode === 'loopback_port_agnostic' && !isLoopbackRedirect(redirect.uri),
+  )
+  if (invalidLoopback) {
+    toast.add({
+      title: 'Loopback any port is only available for http://localhost and http://127.0.0.1',
+      color: 'error',
+    })
+    return false
+  }
+
+  return true
 }
 
 const onSubmit = async () => {
-  if (!form.name) {
-    toast.add({ title: 'Name is required', color: 'error' })
-    return
-  }
-  if (!isEditing.value && form.redirectUris.filter((u) => u.trim()).length === 0) {
-    toast.add({ title: 'At least one redirect URI is required', color: 'error' })
-    return
-  }
+  normalizeRedirectUris()
+  if (!validateForm()) return
 
   submitting.value = true
   try {
+    const redirectUris = buildRedirectUris()
     if (isEditing.value && editingId.value) {
       const data: UpdateOpenAppReq = {
         name: form.name,
         iconUrl: form.iconUrl || undefined,
         description: form.description || undefined,
-        redirectUris: form.redirectUris.filter((u) => u.trim()),
+        redirectUris,
+        allowedScopes: [...form.allowedScopes],
       }
       await openAppStore.update(editingId.value, data)
       toast.add({ title: 'Application updated', color: 'success' })
@@ -445,14 +715,14 @@ const onSubmit = async () => {
         name: form.name,
         iconUrl: form.iconUrl || undefined,
         description: form.description || undefined,
-        redirectUris: form.redirectUris.filter((u) => u.trim()),
+        redirectUris,
+        allowedScopes: [...form.allowedScopes],
       }
       const result = await openAppStore.create(data)
       toast.add({ title: 'Application created', color: 'success' })
-      // Show credentials after creation
-      if (result) {
+      if (result?.appSecret) {
         secretData.appId = result.appId
-        secretData.appSecret = result.appSecret || ''
+        secretData.appSecret = result.appSecret
         secretModalOpen.value = true
       }
     }

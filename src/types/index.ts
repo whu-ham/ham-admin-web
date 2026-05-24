@@ -17,7 +17,7 @@ export interface AppVersion {
   changeLogTitle?: string
   changeLog?: string
   updateUrl?: string
-  updateTime?: string
+  updatedAt?: string
   enabled: boolean
 }
 
@@ -51,15 +51,32 @@ export interface ListVersionsParams {
 }
 
 // ===== OpenApp =====
+export type RedirectUriMatchMode = 'exact' | 'loopback_port_agnostic'
+
+export interface OpenAppRedirectUri {
+  uri: string
+  matchMode: RedirectUriMatchMode
+}
+
+export interface OpenAppScope {
+  scope: string
+  label: string
+  description?: string
+  category: string
+  required: boolean
+  grantable: boolean
+}
+
 export interface OpenApp {
   id: string
   name: string
   iconUrl?: string
   description?: string
-  redirectUris?: string[]
+  redirectUris?: OpenAppRedirectUri[]
   appId: string
   appSecret?: string
-  createTime?: string
+  allowedScopes?: string[]
+  createdAt?: string
 }
 
 export interface OpenAppListItem {
@@ -67,27 +84,34 @@ export interface OpenAppListItem {
   name: string
   iconUrl?: string
   description?: string
-  redirectUris?: string[]
+  redirectUris?: OpenAppRedirectUri[]
   appId: string
-  createTime?: string
+  allowedScopes?: string[]
+  createdAt?: string
 }
 
 export interface CreateOpenAppReq {
   name: string
   iconUrl?: string
   description?: string
-  redirectUris: string[]
+  redirectUris: OpenAppRedirectUri[]
+  allowedScopes: string[]
 }
 
 export interface UpdateOpenAppReq {
   name?: string
   iconUrl?: string
   description?: string
-  redirectUris?: string[]
+  redirectUris?: OpenAppRedirectUri[]
+  allowedScopes?: string[]
 }
 
 export interface ResetSecretResponse {
   appSecret: string
+}
+
+export interface OpenAppScopesResponse {
+  items: OpenAppScope[]
 }
 
 // ===== Common API Response =====

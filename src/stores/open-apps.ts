@@ -8,6 +8,8 @@ import type {
   ListParams,
   OpenApp,
   OpenAppListItem,
+  OpenAppScope,
+  OpenAppScopesResponse,
   PaginatedData,
   ResetSecretResponse,
   UpdateOpenAppReq,
@@ -16,8 +18,10 @@ import type {
 export const useOpenAppsStore = defineStore('open-apps', {
   state: () => ({
     items: [] as OpenAppListItem[],
+    scopes: [] as OpenAppScope[],
     total: 0,
     pending: false,
+    scopesPending: false,
   }),
 
   actions: {
@@ -39,6 +43,18 @@ export const useOpenAppsStore = defineStore('open-apps', {
     async fetchOne(id: string) {
       const api = useApi()
       return api.get<OpenApp>(`/api/open-apps/${id}`)
+    },
+
+    async fetchScopes() {
+      const api = useApi()
+      this.scopesPending = true
+      try {
+        const data = await api.get<OpenAppScopesResponse>('/api/open-app-scopes')
+        this.scopes = data?.items ?? []
+        return this.scopes
+      } finally {
+        this.scopesPending = false
+      }
     },
 
     async create(data: CreateOpenAppReq) {
